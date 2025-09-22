@@ -1,0 +1,26 @@
+{
+  "statusbar_command.commands": [
+    {
+      "text": "$(debug-start)",
+      "tooltip": "Start Backend (nodemon)",
+      "id": "sbc_backend_dev",
+      "name": "backend: dev",
+      "alignment": "left",
+      "priority": 900,
+      "command": "workbench.action.tasks.runTask",
+      "arguments": ["backend: dev"]
+    },
+    {
+      "text": "$(globe)",
+      "tooltip": "Start Frontend (Vite)",
+      "id": "sbc_frontend_start",
+      "name": "frontend: start",
+      "alignment": "left",
+      "priority": 800,
+      "command": "workbench.action.tasks.runTask",
+      "arguments": ["frontend: start"]
+    }
+  ]
+}
+
+

@@ -37,7 +37,7 @@ function App() {
   const [scanActive, setScanActive] = useState(false)
   const [extended, setExtended] = useState(false)
 
-  useWebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws', (msg) => {
+  const { status: wsStatus } = useWebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws', (msg) => {
     if (msg?.type === 'snapshot') {
       setDevices(msg.data?.devices || [])
       setScanActive(!!msg.data?.scanningActive)
@@ -79,7 +79,7 @@ function App() {
       <div className="max-w-7xl mx-auto p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-slate-800 text-2xl font-semibold">
-            <BluetoothIcon /> BLE Devices
+            <BluetoothIcon color={wsStatus === 'open' ? 'success' : 'disabled'} /> BLE Devices
           </div>
           <div className="flex items-center gap-3">
             <FormControlLabel control={<Switch checked={extended} onChange={(e) => setExtended(e.target.checked)} />} label="Extended" />
