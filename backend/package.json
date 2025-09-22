@@ -1,0 +1,39 @@
+{
+  "name": "node-ble-scanner",
+  "version": "1.0.0",
+  "description": "A Node.js application for scanning and connecting to Bluetooth Low Energy (BLE) devices with a web-based interface",
+  "main": "server.js",
+  "scripts": {
+    "dev": "PORT=3000 nodemon server.js",
+    "client:dev": "npm run dev --prefix client",
+    "client:build": "npm run build --prefix client",
+    "client:preview": "npm run preview --prefix client",
+    "build": "npm run client:build",
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "bluetooth",
+    "ble",
+    "bluetooth-low-energy",
+    "nodejs",
+    "websocket",
+    "gatt",
+    "scanner"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@abandonware/noble": "^1.9.2-26",
+    "chalk": "^4.1.2",
+    "cli-table3": "^0.6.5",
+    "express": "^5.1.0",
+    "is-fullwidth-code-point": "^3.0.0",
+    "strip-ansi": "^6.0.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
