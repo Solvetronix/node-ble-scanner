@@ -2,9 +2,8 @@ import IconActionButton from '../ui/IconActionButton'
 import LinkIcon from '@mui/icons-material/Link'
 import LinkOffIcon from '@mui/icons-material/LinkOff'
 import InfoIcon from '@mui/icons-material/Info'
-import { connectDevice, disconnectDevice } from '../api/http'
 
-export default function DevicesTable({ devices = [], extended = false }){
+export default function DevicesTable({ devices = [], extended = false, connectingSet = new Set(), connectedSet = new Set(), onConnect, onDisconnect, onInfo }){
   return (
     <div className="bg-white shadow ring-1 ring-slate-200 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -29,15 +28,37 @@ export default function DevicesTable({ devices = [], extended = false }){
                 <td className="px-4 py-2 text-xs text-slate-600">{d.lastSeen ? new Date(d.lastSeen).toLocaleString() : ''}</td>
                 <td className="px-4 py-2 text-xs">
                   <div className="flex items-center gap-1">
-                    <IconActionButton title="Connect" color="primary" onClick={() => connectDevice(d.id).catch(() => {})}>
-                      <LinkIcon fontSize="inherit" />
-                    </IconActionButton>
-                    <IconActionButton title="Info" color="info" onClick={() => connectDevice(d.id).then(r=>r.json()).catch(() => {})}>
-                      <InfoIcon fontSize="inherit" />
-                    </IconActionButton>
-                    <IconActionButton title="Disconnect" color="error" onClick={() => disconnectDevice(d.id).catch(() => {})}>
-                      <LinkOffIcon fontSize="inherit" />
-                    </IconActionButton>
+                    {(() => {
+                      const isConnecting = connectingSet.has(d.id) || d.connectionStatus === 'connecting'
+                      const isConnected = connectedSet.has(d.id) || d.connected || d.connectionStatus === 'connected'
+                      const hasError = d.connectionStatus === 'error'
+
+                      if (isConnecting) {
+                        return (
+                          <IconActionButton title="Connecting..." color="warning" disabled>
+                            <LinkIcon fontSize="inherit" />
+                          </IconActionButton>
+                        )
+                      }
+                      if (isConnected) {
+                        return (
+                          <>
+                            <IconActionButton title="Info" color="info" onClick={() => onInfo && onInfo(d.id)}>
+                              <InfoIcon fontSize="inherit" />
+                            </IconActionButton>
+                            <IconActionButton title="Disconnect" color="error" onClick={() => onDisconnect && onDisconnect(d.id)}>
+                              <LinkOffIcon fontSize="inherit" />
+                            </IconActionButton>
+                          </>
+                        )
+                      }
+                      // default: not connected
+                      return (
+                        <IconActionButton title={hasError ? 'Retry connect' : 'Connect'} color={hasError ? 'warning' : 'primary'} onClick={() => onConnect && onConnect(d.id)}>
+                          <LinkIcon fontSize="inherit" />
+                        </IconActionButton>
+                      )
+                    })()}
                   </div>
                 </td>
               </tr>
