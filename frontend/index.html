@@ -7,12 +7,16 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   </head>
   <body>
     <div class="min-h-screen bg-slate-50">
       <div class="max-w-7xl mx-auto p-6">
         <div class="flex items-center justify-between mb-4">
-          <h1 class="text-2xl font-semibold text-slate-800">BLE Devices</h1>
+          <h1 class="text-2xl font-semibold text-slate-800 flex items-center gap-2">
+            <span class="material-icons text-2xl">bluetooth</span>
+            BLE Devices
+          </h1>
           <div class="text-slate-600 text-sm" id="meta"></div>
         </div>
         <div id="root"></div>

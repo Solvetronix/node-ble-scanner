@@ -388,6 +388,20 @@ app.post('/scan/start', async (req, res) => {
   }
 });
 
+// REST: stop scanning manually
+app.post('/scan/stop', async (req, res) => {
+  try {
+    await noble.stopScanningAsync();
+    scanningActive = false;
+    logger.info(TAG.SCAN, `BLE scan stopped (manual)`);
+    wsBroadcast({ type: 'scan', data: { active: false, ts: Date.now(), reason: 'manual_stop' } });
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error(TAG.SCAN, `Failed to stop scanning (manual): ${String(err)}`);
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
 // SSE stream that emits BLE advertisements to all clients
 app.get('/events', (req, res) => {
   // Keep connection open for SSE

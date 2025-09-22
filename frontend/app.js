@@ -87,7 +87,7 @@
   }
 
   function DevicesTable(props = {}){
-    const { extendedMode = false } = props;
+    const { extendedMode = false, onScanActiveChange } = props;
     const [devices, setDevices] = React.useState([]);
     const [total, setTotal] = React.useState(0);
     const [lastTs, setLastTs] = React.useState(null);
@@ -131,7 +131,9 @@
         setDevices(list);
         setTotal(list.length);
         setLastTs(Date.now());
-        setScanActive(!!msg.data?.scanningActive);
+        const newScanActive = !!msg.data?.scanningActive;
+        setScanActive(newScanActive);
+        onScanActiveChange && onScanActiveChange(newScanActive);
         
         // Initialize connection states from server data
         const connected = new Set();
@@ -148,7 +150,9 @@
         return;
       }
       if (msg && msg.type === 'scan') {
-        setScanActive(!!msg.data?.active);
+        const newScanActive = !!msg.data?.active;
+        setScanActive(newScanActive);
+        onScanActiveChange && onScanActiveChange(newScanActive);
         setEventLog(prev => [{ ts: msg.data?.ts || Date.now(), text: `Scan ${msg.data?.active ? 'started' : 'stopped'} (${msg.data?.reason || ''})` }, ...prev].slice(0, 100));
         return;
       }
@@ -260,7 +264,7 @@
       const countdownHtml = (status === 'closed' && typeof reconnectIn === 'number')
         ? `<span class="text-xs text-slate-500">reconnect in ${reconnectIn}s</span>`
         : '';
-      const scanGear = `<span title="Scanning" class="inline-block w-4 h-4 align-middle ${scanActive ? 'animate-spin' : ''}">⚙️</span>`;
+      const scanGear = `<span title="Scanning" class="material-icons align-middle text-base ${scanActive ? 'animate-spin' : ''}">${scanActive ? 'radar' : 'radar'}</span>`;
       meta.innerHTML = `
         <span class="inline-flex items-center gap-2">
           <span class="inline-block w-2.5 h-2.5 rounded-full ${statusColorClass}" title="WebSocket status: ${status}"></span>
@@ -308,7 +312,10 @@
                   return e('button', {
                     className: 'inline-flex items-center px-3 py-1 rounded-md bg-yellow-600 text-white cursor-not-allowed',
                     disabled: true
-                  }, 'Connecting...');
+                  }, [
+                    e('span', { className: 'material-icons text-sm' }, 'sync'),
+                    e('span', {}, 'Connecting...')
+                  ]);
                 }
                 
                 if (isConnected) {
@@ -317,7 +324,10 @@
                     e('button', {
                       className: 'inline-flex items-center px-3 py-1 rounded-md bg-green-600 text-white cursor-not-allowed',
                       disabled: true
-                    }, 'Connected'),
+                    }, [
+                      e('span', { className: 'material-icons text-sm' }, 'link'),
+                      e('span', {}, 'Connected')
+                    ]),
                     e('button', {
                       className: 'inline-flex items-center px-3 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700',
                       onClick: () => {
@@ -335,7 +345,10 @@
                             .catch(() => {});
                         }
                       }
-                    }, 'Info'),
+                    }, [
+                      e('span', { className: 'material-icons text-sm' }, 'info'),
+                      e('span', {}, 'Info')
+                    ]),
                     e('button', {
                       className: 'inline-flex items-center px-3 py-1 rounded-md bg-red-600 text-white hover:bg-red-700',
                       onClick: () => {
@@ -358,7 +371,10 @@
                           })
                           .catch(() => {});
                       }
-                    }, 'Disconnect'),
+                    }, [
+                      e('span', { className: 'material-icons text-sm' }, 'link_off'),
+                      e('span', {}, 'Disconnect')
+                    ]),
                     ...(hasLastError ? [
                       e('button', {
                         className: 'inline-flex items-center px-3 py-1 rounded-md bg-red-600 text-white hover:bg-red-700',
@@ -373,7 +389,10 @@
                             window.__modal.setStatus('Connection Error');
                           }
                         }
-                      }, 'Error')
+                      }, [
+                        e('span', { className: 'material-icons text-sm' }, 'error'),
+                        e('span', {}, 'Error')
+                      ])
                     ] : [])
                   ]);
                 }
@@ -387,7 +406,7 @@
                           .then(r => r.json())
                           .catch(() => {});
                       }
-                    }, 'Connect'),
+                    }, [e('span', { className: 'material-icons text-sm' }, 'link'), e('span', {}, 'Connect')]),
                     e('button', {
                       className: 'inline-flex items-center px-3 py-1 rounded-md bg-red-600 text-white hover:bg-red-700',
                       onClick: () => {
@@ -401,7 +420,7 @@
                           window.__modal.setStatus('Connection Error');
                         }
                       }
-                    }, 'Error')
+                    }, [e('span', { className: 'material-icons text-sm' }, 'error'), e('span', {}, 'Error')])
                   ]);
                 }
                 
@@ -415,7 +434,7 @@
                           .then(r => r.json())
                           .catch(() => {});
                       }
-                    }, 'Connect'),
+                    }, [e('span', { className: 'material-icons text-sm' }, 'link'), e('span', {}, 'Connect')]),
                     e('div', { 
                       className: 'text-xs text-orange-600 max-w-32 truncate',
                       title: reason
@@ -432,7 +451,7 @@
                           .then(r => r.json())
                           .catch(() => {});
                       }
-                    }, 'Connect'),
+                    }, [e('span', { className: 'material-icons text-sm' }, 'link'), e('span', {}, 'Connect')]),
                     e('button', {
                       className: 'inline-flex items-center px-3 py-1 rounded-md bg-red-600 text-white hover:bg-red-700',
                       onClick: () => {
@@ -446,7 +465,7 @@
                           window.__modal.setStatus('Connection Error');
                         }
                       }
-                    }, 'Error')
+                    }, [e('span', { className: 'material-icons text-sm' }, 'error'), e('span', {}, 'Error')])
                   ]);
                 }
                 
@@ -457,7 +476,7 @@
                       .then(r => r.json())
                       .catch(() => {});
                   }
-                }, 'Connect');
+                }, [e('span', { className: 'material-icons text-sm' }, 'link'), e('span', {}, 'Connect')]);
               })()
             ])
           ])))
@@ -472,6 +491,7 @@
     const [device, setDevice] = React.useState(null);
     const [statusText, setStatusText] = React.useState('');
     const [extendedMode, setExtendedMode] = React.useState(false);
+    const [scanActive, setScanActive] = React.useState(false);
 
     // Proxy down setters to child via context-less prop drilling using closures
     const Devices = DevicesTable.bind(null);
@@ -483,11 +503,11 @@
         e('div', { className: 'bg-white w-full max-w-2xl rounded-lg shadow ring-1 ring-slate-200 p-4' }, [
           e('div', { className: 'flex items-center justify-between mb-3' }, [
             e('h2', { className: 'text-lg font-semibold text-slate-800' }, 'Device connection'),
-            e('button', { className: 'text-slate-500 hover:text-slate-700', onClick: () => { if (!loading) { setOpen(false); setDevice(null); /* Don't restart scanning automatically */ } } }, '✕')
+            e('button', { className: 'text-slate-500 hover:text-slate-700', onClick: () => { if (!loading) { setOpen(false); setDevice(null); /* Don't restart scanning automatically */ } } }, e('span', { className: 'material-icons' }, 'close'))
           ]),
           loading ?
             e('div', { className: 'flex items-center justify-center py-10' }, [
-              e('div', { className: 'inline-block w-8 h-8 border-4 border-slate-300 border-t-slate-700 rounded-full animate-spin', role: 'status', 'aria-label': 'Loading' }),
+              e('span', { className: 'material-icons animate-spin text-4xl text-slate-600' }, 'sync'),
               e('span', { className: 'ml-3 text-sm text-slate-600' }, statusText || 'Connecting...')
             ])
             :
@@ -558,18 +578,33 @@
     return e('div', { className: 'min-h-screen bg-slate-50' }, [
       e('div', { className: 'max-w-7xl mx-auto p-6' }, [
         e('div', { className: 'flex items-center justify-between mb-4' }, [
-          e('label', { className: 'inline-flex items-center gap-2 text-sm text-slate-600' }, [
-            e('input', { 
-              type: 'checkbox', 
-              checked: extendedMode,
-              onChange: (e) => setExtendedMode(e.target.checked),
-              className: 'rounded border-slate-300'
-            }),
-            e('span', {}, 'Extended mode')
+          e('div', { className: 'flex items-center gap-4' }, [
+            e('label', { className: 'inline-flex items-center gap-2 text-sm text-slate-600' }, [
+              e('input', { 
+                type: 'checkbox', 
+                checked: extendedMode,
+                onChange: (e) => setExtendedMode(e.target.checked),
+                className: 'rounded border-slate-300'
+              }),
+              e('span', {}, 'Extended mode')
+            ]),
+            e('button', {
+              className: 'inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ' + 
+                (scanActive ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-green-600 text-white hover:bg-green-700'),
+              onClick: () => {
+                const endpoint = scanActive ? '/scan/stop' : '/scan/start';
+                fetch(endpoint, { method: 'POST' })
+                  .then(r => r.json())
+                  .catch(() => {});
+              }
+            }, [
+              e('span', { className: 'material-icons text-base' }, scanActive ? 'stop' : 'play_arrow'),
+              e('span', {}, scanActive ? 'Stop Scan' : 'Start Scan')
+            ])
           ])
         ]),
         e('div', { id: 'meta', className: 'text-slate-600 text-sm mb-4' }),
-        e(PatchedDevicesTable, { extendedMode }),
+        e(PatchedDevicesTable, { extendedMode, onScanActiveChange: setScanActive }),
         e(Modal, {})
       ])
     ]);
