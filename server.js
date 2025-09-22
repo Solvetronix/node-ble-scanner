@@ -110,7 +110,8 @@ function pushEvent(payload) {
   wsBroadcast({ type: 'adv', data: payload });
 }
 
-// static files: prefer frontend/, fallback to public/
+// static files: prefer built React app (client/dist), then frontend/, then public/
+app.use(express.static(path.join(__dirname, 'client', 'dist')));
 app.use(express.static(path.join(__dirname, 'frontend')));
 app.use(express.static(path.join(__dirname, 'public')));
 
