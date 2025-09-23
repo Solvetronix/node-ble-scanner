@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { listDevices, connect, disconnect } = require('../controllers/bleController');
+const useBluez = String(process.env.USE_BLUEZ || '0') === '1';
+const { listDevices, connect, disconnect } = useBluez
+  ? require('../controllers/bleControllerBluez')
+  : require('../controllers/bleController');
 const { startScanManual, stopScanManual } = require('../services/bleService');
 
 router.get('/devices', listDevices);

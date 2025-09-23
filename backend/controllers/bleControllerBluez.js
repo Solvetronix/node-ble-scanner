@@ -1,0 +1,135 @@
+const dbus = require('dbus-next');
+const { wsBroadcast } = require('../realtime');
+const { getDevicesList, setDevice } = require('../services/bleServiceBluez');
+
+// Keep simple in-memory map of connected devices (BlueZ proxies and details)
+const connectedMap = new Map(); // id -> { deviceObj, deviceIf, charIfaces: Map<charPath, iface> }
+
+async function getBluezAndManaged() {
+  const bus = dbus.systemBus();
+  const root = await bus.getProxyObject('org.bluez', '/');
+  const objMgr = root.getInterface('org.freedesktop.DBus.ObjectManager');
+  const managed = await objMgr.GetManagedObjects();
+  return { bus, managed };
+}
+
+function findDevicePathById(managed, id) {
+  const suffix = '/' + String(id);
+  const paths = Object.keys(managed).filter(p => p.endsWith(suffix) && managed[p]['org.bluez.Device1']);
+  return paths.length ? paths[0] : null;
+}
+
+async function listDevices(req, res) {
+  const list = getDevicesList().map(d => ({ ...d }));
+  res.json({ ts: Date.now(), count: list.length, devices: list });
+}
+
+async function connect(req, res) {
+  const id = String(req.params.id || '').trim();
+  const { bus, managed } = await getBluezAndManaged();
+  const devPath = findDevicePathById(managed, id);
+  if (!devPath) {
+    res.status(404).json({ ok: false, error: 'Device not found' });
+    return;
+  }
+
+  // Optimistic state update and broadcast
+  setDevice(id, { id, connectionStatus: 'connecting', connectionTimestamp: Date.now(), connectionError: null });
+  wsBroadcast({ type: 'connect', data: { id, status: 'starting', ts: Date.now() } });
+
+  try {
+    const devObj = await bus.getProxyObject('org.bluez', devPath);
+    const devIf = devObj.getInterface('org.bluez.Device1');
+    await devIf.Connect();
+
+    // Discover characteristics under this device path
+    const { managed: managed2 } = await getBluezAndManaged();
+    const charPaths = Object.keys(managed2).filter(p => p.startsWith(devPath + '/') && managed2[p]['org.bluez.GattCharacteristic1']);
+
+    const charIfaces = new Map();
+    for (const cp of charPaths) {
+      try {
+        const chObj = await bus.getProxyObject('org.bluez', cp);
+        const chIf = chObj.getInterface('org.bluez.GattCharacteristic1');
+        charIfaces.set(cp, chIf);
+
+        // If characteristic supports notify/indicate, try StartNotify
+        const propsIf = chObj.getInterface('org.freedesktop.DBus.Properties');
+        const flags = (managed2[cp]['org.bluez.GattCharacteristic1'].Flags) || [];
+        if (Array.isArray(flags) && (flags.includes('notify') || flags.includes('indicate'))) {
+          try { await chIf.StartNotify(); } catch (_) {}
+          // Listen for Value changes
+          propsIf.on('PropertiesChanged', (iface, changed) => {
+            if (iface !== 'org.bluez.GattCharacteristic1') return;
+            if (!changed || !('Value' in changed)) return;
+            try {
+              const val = changed.Value.value; // array of bytes
+              const hex = Array.isArray(val) ? Buffer.from(val).toString('hex') : null;
+              wsBroadcast({ type: 'notify', data: { id, charUuid: (managed2[cp]['org.bluez.GattCharacteristic1'].UUID || ''), data: hex, ts: Date.now() } });
+            } catch (_) {}
+          });
+        }
+      } catch (_) {}
+    }
+
+    connectedMap.set(id, { deviceObj: devObj, deviceIf: devIf, charIfaces });
+
+    // Update device details for snapshot
+    const devProps = managed2[devPath]['org.bluez.Device1'] || {};
+    const details = {
+      id,
+      address: devProps.Address || null,
+      localName: devProps.Name || devProps.Alias || null,
+      rssi: typeof devProps.RSSI === 'number' ? devProps.RSSI : null,
+      serviceUuids: Array.isArray(devProps.UUIDs) ? devProps.UUIDs : [],
+      manufacturerDataHex: null,
+      connectedAt: Date.now(),
+      services: [],
+      characteristics: [],
+    };
+
+    setDevice(id, {
+      id,
+      address: details.address,
+      localName: details.localName,
+      lastRssi: details.rssi,
+      lastSeen: Date.now(),
+      serviceUuids: details.serviceUuids,
+      manufacturerDataHex: null,
+      connected: true,
+      connectionStatus: 'connected',
+      connectionTimestamp: Date.now(),
+      connectionError: null,
+    });
+
+    wsBroadcast({ type: 'connected', data: details });
+    wsBroadcast({ type: 'connect', data: { id, status: 'success', ts: Date.now() } });
+    res.json({ ok: true, device: details });
+  } catch (err) {
+    const errorMsg = String(err);
+    setDevice(id, { id, connectionStatus: 'error', connectionTimestamp: Date.now(), connectionError: errorMsg, lastConnectionError: errorMsg, lastConnectionErrorTimestamp: Date.now() });
+    wsBroadcast({ type: 'connect', data: { id, status: 'error', error: errorMsg, ts: Date.now() } });
+    res.status(500).json({ ok: false, error: errorMsg });
+  }
+}
+
+async function disconnect(req, res) {
+  const id = String(req.params.id || '').trim();
+  const entry = connectedMap.get(id);
+  if (!entry) {
+    res.status(404).json({ ok: false, error: 'Device not connected' });
+    return;
+  }
+  try {
+    await entry.deviceIf.Disconnect();
+    connectedMap.delete(id);
+    setDevice(id, { id, connected: false, connectionStatus: 'disconnected', connectionTimestamp: Date.now(), connectionError: 'manual disconnect' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
+  }
+}
+
+module.exports = { listDevices, connect, disconnect };
+
+

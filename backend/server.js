@@ -4,7 +4,10 @@ const http = require('http');
 const { WebSocketServer } = require('ws');
 const bleRouter = require('./routes/bleRouter');
 const { setWss, sseAdd, sseRemove, getLastEvents } = require('./realtime');
-const { startScan, getDevicesList, getScanningActive } = require('./services/bleService');
+const useBluez = String(process.env.USE_BLUEZ || '0') === '1';
+const { startScan, getDevicesList, getScanningActive } = useBluez
+  ? require('./services/bleServiceBluez')
+  : require('./services/bleService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -55,7 +58,7 @@ wss.on('connection', (ws) => {
 // scanning logic moved to service
 
 server.listen(PORT, () => {
-  console.log(`HTTP :${PORT} | SSE /events | WS /ws`);
+  console.log(`HTTP :${PORT} | SSE /events | WS /ws | bluez=${useBluez}`);
   startScan({
     allowDuplicates: String(process.env.ALLOW_DUPLICATES || 'true').toLowerCase() === 'true',
     filterMinRssi: Number(process.env.FILTER_MIN_RSSI || -200),
