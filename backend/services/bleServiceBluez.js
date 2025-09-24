@@ -46,6 +46,16 @@ function unwrapDeviceProps(dev) {
   return { name, addr, rssi, uuids, connected };
 }
 
+function isHumanReadableName(value) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const macColon = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i;
+  const macHyphen = /^([0-9A-F]{2}-){5}[0-9A-F]{2}$/i;
+  if (macColon.test(trimmed) || macHyphen.test(trimmed)) return false;
+  return true;
+}
+
 async function startScan() {
   // Best-effort discovery using BlueZ Adapter1.StartDiscovery via D-Bus
   try {
@@ -81,7 +91,7 @@ async function startScan() {
           if (iface !== 'org.bluez.Device1') return;
           try {
             const id = String(path.split('/').pop());
-            const name = unwrap(changed.Name) || unwrap(changed.Alias) || undefined;
+            const nameCandidate = unwrap(changed.Name) || unwrap(changed.Alias) || undefined;
             const addr = unwrap(changed.Address) || undefined;
             const rssiRaw = unwrap(changed.RSSI);
             const rssi = (typeof rssiRaw === 'number') ? rssiRaw : undefined;
@@ -91,7 +101,10 @@ async function startScan() {
 
             const update = { id };
             if (typeof addr !== 'undefined') update.address = addr;
-            if (typeof name !== 'undefined') update.localName = name;
+            // Only update name if it looks like a human-friendly name; otherwise keep the last known
+            if (typeof nameCandidate !== 'undefined' && isHumanReadableName(nameCandidate)) {
+              update.localName = nameCandidate.trim();
+            }
             if (typeof rssi !== 'undefined') update.lastRssi = rssi;
             update.lastSeen = Date.now();
             if (typeof uuids !== 'undefined') update.serviceUuids = uuids;
