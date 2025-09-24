@@ -52,10 +52,82 @@ async function connect(req, res) {
   setDevice(id, { id, connectionStatus: 'connecting', connectionTimestamp: Date.now(), connectionError: null });
   wsBroadcast({ type: 'connect', data: { id, status: 'starting', ts: Date.now() } });
 
+  async function awaitConnected(timeoutMs = 15000) {
+    const devObj = await bus.getProxyObject('org.bluez', devPath);
+    const propsIf = devObj.getInterface('org.freedesktop.DBus.Properties');
+    const start = Date.now();
+    return await new Promise((resolve, reject) => {
+      let resolved = false;
+      const onChange = (iface, changed) => {
+        if (iface !== 'org.bluez.Device1' || resolved) return;
+        const connected = typeof changed.Connected !== 'undefined' ? !!(changed.Connected.value ?? changed.Connected) : undefined;
+        const servicesResolved = typeof changed.ServicesResolved !== 'undefined' ? !!(changed.ServicesResolved.value ?? changed.ServicesResolved) : undefined;
+        if (connected === true || servicesResolved === true) {
+          resolved = true;
+          cleanup();
+          resolve(true);
+        }
+      };
+      const cleanup = () => { try { propsIf.off('PropertiesChanged', onChange); } catch(_) {} };
+      try { propsIf.on('PropertiesChanged', onChange); } catch(_) {}
+      const t = setInterval(async () => {
+        if (Date.now() - start > timeoutMs) {
+          clearInterval(t);
+          cleanup();
+          return reject(new Error('Connect timeout'));
+        }
+        try {
+          const connectedVar = await propsIf.Get('org.bluez.Device1', 'Connected');
+          const srVar = await propsIf.Get('org.bluez.Device1', 'ServicesResolved');
+          const connected = !!(connectedVar.value ?? connectedVar);
+          const servicesResolved = !!(srVar.value ?? srVar);
+          if (connected || servicesResolved) {
+            clearInterval(t);
+            cleanup();
+            return resolve(true);
+          }
+        } catch(_) {}
+      }, 300);
+    });
+  }
+
   try {
     const devObj = await bus.getProxyObject('org.bluez', devPath);
     const devIf = devObj.getInterface('org.bluez.Device1');
-    await devIf.Connect();
+
+    // Retry strategy for transient "le-connection-abort-by-local"
+    let attempt = 0;
+    const maxAttempts = 3;
+    // Ensure we listen for later disconnects
+    const propsIf = devObj.getInterface('org.freedesktop.DBus.Properties');
+    try {
+      propsIf.on('PropertiesChanged', (iface, changed) => {
+        if (iface !== 'org.bluez.Device1') return;
+        const isConnected = typeof changed.Connected !== 'undefined' ? !!(changed.Connected.value ?? changed.Connected) : undefined;
+        if (isConnected === false) {
+          const now = Date.now();
+          setDevice(id, { id, connected: false, connectionStatus: 'disconnected', connectionTimestamp: now, connectionError: 'automatic disconnect' });
+          wsBroadcast({ type: 'disconnected', data: { id, ts: now, reason: 'automatic' } });
+        }
+      });
+    } catch(_) {}
+
+    // Try connect
+    while (true) {
+      try {
+        await devIf.Connect();
+        await awaitConnected(15000);
+        break;
+      } catch (err) {
+        const msg = String(err || '');
+        attempt += 1;
+        if (attempt >= maxAttempts || !/le-connection-abort-by-local/i.test(msg)) {
+          throw err;
+        }
+        // small delay and retry
+        await new Promise(r => setTimeout(r, 700));
+      }
+    }
 
     // Discover characteristics under this device path
     const { managed: managed2 } = await getBluezAndManaged();
