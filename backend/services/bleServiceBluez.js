@@ -25,6 +25,22 @@ function getScanningActive() {
   return scanningActive;
 }
 
+function unwrap(v) {
+  if (v && typeof v === 'object' && 'signature' in v && 'value' in v) return v.value;
+  return v;
+}
+
+function unwrapDeviceProps(dev) {
+  const name = unwrap(dev.Name) || unwrap(dev.Alias) || null;
+  const addr = unwrap(dev.Address) || null;
+  const rssiRaw = unwrap(dev.RSSI);
+  const rssi = typeof rssiRaw === 'number' ? rssiRaw : null;
+  const uuidsRaw = unwrap(dev.UUIDs);
+  const uuids = Array.isArray(uuidsRaw) ? uuidsRaw.map(unwrap) : [];
+  const connected = !!unwrap(dev.Connected);
+  return { name, addr, rssi, uuids, connected };
+}
+
 async function startScan() {
   // Best-effort discovery using BlueZ Adapter1.StartDiscovery via D-Bus
   try {
@@ -43,19 +59,17 @@ async function startScan() {
       const dev = ifaces && ifaces['org.bluez.Device1'];
       if (!dev) continue;
       const id = String(path.split('/').pop());
-      const name = (dev.Name || dev.Alias || null);
-      const addr = dev.Address || null;
-      const rssi = typeof dev.RSSI === 'number' ? dev.RSSI : null;
+      const { name, addr, rssi, uuids, connected } = unwrapDeviceProps(dev);
       setDevice(id, {
         id,
         address: addr,
         localName: name,
         lastRssi: rssi,
         lastSeen: Date.now(),
-        serviceUuids: Array.isArray(dev.UUIDs) ? dev.UUIDs : [],
+        serviceUuids: uuids,
         manufacturerDataHex: null,
-        connected: !!dev.Connected,
-        connectionStatus: dev.Connected ? 'connected' : null,
+        connected,
+        connectionStatus: connected ? 'connected' : null,
       });
       pushEvent({
         ts: Date.now(),
@@ -63,7 +77,7 @@ async function startScan() {
         address: addr,
         rssi,
         localName: name,
-        serviceUuids: Array.isArray(dev.UUIDs) ? dev.UUIDs : [],
+        serviceUuids: uuids,
         manufacturerData: null,
         serviceData: [],
       });
@@ -74,19 +88,17 @@ async function startScan() {
       if (!ifaces || !ifaces['org.bluez.Device1']) return;
       const dev = ifaces['org.bluez.Device1'];
       const id = String(path.split('/').pop());
-      const name = (dev.Name || dev.Alias || null);
-      const addr = dev.Address || null;
-      const rssi = typeof dev.RSSI === 'number' ? dev.RSSI : null;
+      const { name, addr, rssi, uuids, connected } = unwrapDeviceProps(dev);
       setDevice(id, {
         id,
         address: addr,
         localName: name,
         lastRssi: rssi,
         lastSeen: Date.now(),
-        serviceUuids: Array.isArray(dev.UUIDs) ? dev.UUIDs : [],
+        serviceUuids: uuids,
         manufacturerDataHex: null,
-        connected: !!dev.Connected,
-        connectionStatus: dev.Connected ? 'connected' : null,
+        connected,
+        connectionStatus: connected ? 'connected' : null,
       });
       pushEvent({
         ts: Date.now(),
@@ -94,7 +106,7 @@ async function startScan() {
         address: addr,
         rssi,
         localName: name,
-        serviceUuids: Array.isArray(dev.UUIDs) ? dev.UUIDs : [],
+        serviceUuids: uuids,
         manufacturerData: null,
         serviceData: [],
       });
