@@ -9,7 +9,8 @@ module.exports = {
       watch: false,
       env: {
         NODE_ENV: 'production',
-        PORT: '3000'
+        PORT: '3000',
+        USE_BLUEZ: '1'
       },
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       max_restarts: 10,
