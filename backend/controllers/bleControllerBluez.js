@@ -5,6 +5,21 @@ const { getDevicesList, setDevice } = require('../services/bleServiceBluez');
 // Keep simple in-memory map of connected devices (BlueZ proxies and details)
 const connectedMap = new Map(); // id -> { deviceObj, deviceIf, charIfaces: Map<charPath, iface> }
 
+function unwrap(v) {
+  if (v && typeof v === 'object' && 'signature' in v && 'value' in v) return v.value;
+  return v;
+}
+
+function unwrapDeviceProps(devProps) {
+  const address = unwrap(devProps.Address) || null;
+  const localName = unwrap(devProps.Name) || unwrap(devProps.Alias) || null;
+  const rssiRaw = unwrap(devProps.RSSI);
+  const rssi = typeof rssiRaw === 'number' ? rssiRaw : null;
+  const uuidsRaw = unwrap(devProps.UUIDs);
+  const serviceUuids = Array.isArray(uuidsRaw) ? uuidsRaw.map(unwrap) : [];
+  return { address, localName, rssi, serviceUuids };
+}
+
 async function getBluezAndManaged() {
   const bus = dbus.systemBus();
   const root = await bus.getProxyObject('org.bluez', '/');
@@ -55,7 +70,8 @@ async function connect(req, res) {
 
         // If characteristic supports notify/indicate, try StartNotify
         const propsIf = chObj.getInterface('org.freedesktop.DBus.Properties');
-        const flags = (managed2[cp]['org.bluez.GattCharacteristic1'].Flags) || [];
+        const flagsRaw = (managed2[cp]['org.bluez.GattCharacteristic1'].Flags) || [];
+        const flags = Array.isArray(flagsRaw) ? flagsRaw.map(unwrap) : [];
         if (Array.isArray(flags) && (flags.includes('notify') || flags.includes('indicate'))) {
           try { await chIf.StartNotify(); } catch (_) {}
           // Listen for Value changes
@@ -63,9 +79,10 @@ async function connect(req, res) {
             if (iface !== 'org.bluez.GattCharacteristic1') return;
             if (!changed || !('Value' in changed)) return;
             try {
-              const val = changed.Value.value; // array of bytes
+              const val = unwrap(changed.Value); // array of bytes
               const hex = Array.isArray(val) ? Buffer.from(val).toString('hex') : null;
-              wsBroadcast({ type: 'notify', data: { id, charUuid: (managed2[cp]['org.bluez.GattCharacteristic1'].UUID || ''), data: hex, ts: Date.now() } });
+              const uuid = unwrap(managed2[cp]['org.bluez.GattCharacteristic1'].UUID) || '';
+              wsBroadcast({ type: 'notify', data: { id, charUuid: uuid, data: hex, ts: Date.now() } });
             } catch (_) {}
           });
         }
@@ -76,12 +93,13 @@ async function connect(req, res) {
 
     // Update device details for snapshot
     const devProps = managed2[devPath]['org.bluez.Device1'] || {};
+    const un = unwrapDeviceProps(devProps);
     const details = {
       id,
-      address: devProps.Address || null,
-      localName: devProps.Name || devProps.Alias || null,
-      rssi: typeof devProps.RSSI === 'number' ? devProps.RSSI : null,
-      serviceUuids: Array.isArray(devProps.UUIDs) ? devProps.UUIDs : [],
+      address: un.address,
+      localName: un.localName,
+      rssi: un.rssi,
+      serviceUuids: un.serviceUuids,
       manufacturerDataHex: null,
       connectedAt: Date.now(),
       services: [],
