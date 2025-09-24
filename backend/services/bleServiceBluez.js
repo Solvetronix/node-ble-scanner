@@ -54,6 +54,15 @@ async function startScan() {
     if (!adapterPath) throw new Error('No Bluetooth adapter found');
     const adapterObj = await systemBus.getProxyObject('org.bluez', adapterPath);
     const adapter = adapterObj.getInterface('org.bluez.Adapter1');
+    // Hint BlueZ to perform LE discovery with duplicate data to receive scan responses (names)
+    try {
+      const Variant = dbus.Variant;
+      const filter = {
+        Transport: new Variant('s', 'le'),
+        DuplicateData: new Variant('b', true),
+      };
+      await adapter.SetDiscoveryFilter(filter);
+    } catch (_) {}
 
     // Prime state with already known devices so UI gets immediate snapshot
     async function attachDeviceListener(path) {
