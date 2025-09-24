@@ -120,6 +120,11 @@ async function connect(req, res) {
       try { await propsIf.Set('org.bluez.Device1', 'AutoConnect', new Variant('b', true)); } catch(_) {}
     } catch(_) {}
 
+    // Derive adapter path and interface (e.g. /org/bluez/hci0)
+    const adapterPath = devPath.split('/').slice(0, 3).join('/');
+    const adapterObj = await bus.getProxyObject('org.bluez', adapterPath);
+    const adapterIf = adapterObj.getInterface('org.bluez.Adapter1');
+
     // Try connect with small backoff
     while (true) {
       try {
@@ -131,13 +136,38 @@ async function connect(req, res) {
       } catch (err) {
         const msg = String(err || '');
         attempt += 1;
-        if (attempt >= maxAttempts) {
-          throw err;
-        }
+        // One-time fallback: stop discovery briefly and/or pair, then retry
+        const canRetry = attempt < maxAttempts;
+        if (!canRetry) throw err;
+
+        // Brief StopDiscovery → Connect → StartDiscovery
+        try {
+          await adapterIf.StopDiscovery();
+        } catch(_) {}
+
+        // If not paired — try to Pair() (non-blocking if already paired)
+        try {
+          const pairedVar = await propsIf.Get('org.bluez.Device1', 'Paired');
+          const paired = !!(pairedVar.value ?? pairedVar);
+          if (!paired) {
+            try { await devIf.Pair(); } catch(_) {}
+          }
+        } catch(_) {}
+
         // small delay and retry
         await new Promise(r => setTimeout(r, 700));
-        // clear any pending connect before next try
         try { await devIf.CancelConnect(); } catch(_) {}
+
+        try {
+          await devIf.Connect();
+          await awaitConnected(15000);
+          try { await devIf.ConnectProfile('00001801-0000-1000-8000-00805f9b34fb'); } catch(_) {}
+          break;
+        } catch (err2) {
+          if (attempt + 1 >= maxAttempts) throw err2;
+        } finally {
+          try { await adapterIf.StartDiscovery(); } catch(_) {}
+        }
       }
     }
 
