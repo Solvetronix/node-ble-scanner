@@ -280,6 +280,14 @@
     // columns
     const headers = ['RSSI (dB)', 'Name', ...(extendedMode ? ['ID', 'Address', 'Service UUIDs', 'Manufacturer Data'] : []), 'Last Seen', 'Actions'];
 
+    function formatName(name){
+      if (!name) return '';
+      const macColon = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i;
+      const macHyphen = /^([0-9A-F]{2}-){5}[0-9A-F]{2}$/i;
+      if (macColon.test(name) || macHyphen.test(name)) return '';
+      return name;
+    }
+
     return e('div', { className: 'bg-white shadow ring-1 ring-slate-200 rounded-lg overflow-hidden' }, [
       e('div', { className: 'overflow-x-auto' }, [
         e('table', { className: 'min-w-full divide-y divide-slate-200' }, [
@@ -288,7 +296,7 @@
           ]),
           e('tbody', { className: 'divide-y divide-slate-100' }, devices.map((d) => e('tr', { key: d.id, className: 'hover:bg-slate-50' }, [
             e('td', { className: 'px-4 py-2 text-sm' }, e('span', { className: 'font-medium ' + rssiColorClass(d.lastRssi) }, (typeof d.lastRssi === 'number') ? String(d.lastRssi) : '')),
-            e('td', { className: 'px-4 py-2 text-sm text-slate-800' }, d.localName || ''),
+            e('td', { className: 'px-4 py-2 text-sm text-slate-800' }, formatName(d.localName) || ''),
             ...(extendedMode ? [
               e('td', { className: 'px-4 py-2 text-xs text-slate-600' }, d.id),
               e('td', { className: 'px-4 py-2 text-xs text-slate-600' }, d.address || ''),

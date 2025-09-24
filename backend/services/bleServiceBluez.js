@@ -32,13 +32,17 @@ function unwrap(v) {
 }
 
 function unwrapDeviceProps(dev) {
-  const name = unwrap(dev.Name) || unwrap(dev.Alias) || null;
+  let name = unwrap(dev.Name) || unwrap(dev.Alias) || null;
   const addr = unwrap(dev.Address) || null;
   const rssiRaw = unwrap(dev.RSSI);
   const rssi = typeof rssiRaw === 'number' ? rssiRaw : null;
   const uuidsRaw = unwrap(dev.UUIDs);
   const uuids = Array.isArray(uuidsRaw) ? uuidsRaw.map(unwrap) : [];
   const connected = !!unwrap(dev.Connected);
+  // If BlueZ reports address-like string as name, drop it (it's not a human-friendly name)
+  const macLike = /^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i;
+  const macHyphen = /^([0-9A-F]{2}-){5}[0-9A-F]{2}$/i;
+  if (name && (macLike.test(name) || macHyphen.test(name))) name = null;
   return { name, addr, rssi, uuids, connected };
 }
 

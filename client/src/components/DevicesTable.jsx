@@ -4,6 +4,13 @@ import LinkOffIcon from '@mui/icons-material/LinkOff'
 import InfoIcon from '@mui/icons-material/Info'
 
 export default function DevicesTable({ devices = [], extended = false, connectingSet = new Set(), connectedSet = new Set(), onConnect, onDisconnect, onInfo }){
+  function formatName(localName, address){
+    if (!localName) return ''
+    const macColon = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i
+    const macHyphen = /^([0-9A-F]{2}-){5}[0-9A-F]{2}$/i
+    if (macColon.test(localName) || macHyphen.test(localName)) return ''
+    return localName
+  }
   return (
     <div className="bg-white shadow ring-1 ring-slate-200 rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -22,7 +29,7 @@ export default function DevicesTable({ devices = [], extended = false, connectin
             {devices.map((d) => (
               <tr key={d.id} className="hover:bg-slate-50">
                 <td className="px-4 py-2 text-sm">{typeof d.lastRssi === 'number' ? d.lastRssi : ''}</td>
-                <td className="px-4 py-2 text-sm">{d.localName || ''}</td>
+                <td className="px-4 py-2 text-sm">{formatName(d.localName, d.address) || ''}</td>
                 {extended && <td className="px-4 py-2 text-xs text-slate-600">{d.id}</td>}
                 {extended && <td className="px-4 py-2 text-xs text-slate-600">{d.address || ''}</td>}
                 <td className="px-4 py-2 text-xs text-slate-600">{d.lastSeen ? new Date(d.lastSeen).toLocaleString() : ''}</td>
