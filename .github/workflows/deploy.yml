@@ -1,0 +1,49 @@
+name: Deploy to server via PM2
+
+on:
+  push:
+    branches:
+      - main
+      - feature/bluez-dbus
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rsync project to server
+        uses: burnett01/rsync-deployments@5.2
+        with:
+          switches: -az --delete --exclude='.git' --exclude='**/node_modules' --exclude='.github'
+          path: ./
+          remote_path: /opt/node_ble/
+          remote_host: ${{ secrets.SSH_HOST }}
+          remote_user: ${{ secrets.SSH_USER }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      - name: Install deps and reload PM2
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+            # Backend dependencies
+            cd /opt/node_ble/backend
+            npm ci
+            # Optional: build client if present
+            if [ -f ../client/package.json ]; then
+              cd ../client
+              npm ci
+              npm run build || true
+              cd -
+            fi
+            # PM2 start or reload
+            pm2 startOrReload ecosystem.config.js || pm2 start ecosystem.config.js
+            pm2 save
+
+
