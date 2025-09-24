@@ -38,11 +38,8 @@ async function startScan() {
     const adapterObj = await systemBus.getProxyObject('org.bluez', adapterPath);
     const adapter = adapterObj.getInterface('org.bluez.Adapter1');
 
-    // Listen for new devices via ObjectManager signals
-    systemBus.addMatch("type='signal',sender='org.bluez',interface='org.freedesktop.DBus.ObjectManager',member='InterfacesAdded'");
-    systemBus.on('message', (msg) => {
-      if (msg.interface !== 'org.freedesktop.DBus.ObjectManager' || msg.member !== 'InterfacesAdded') return;
-      const [path, ifaces] = msg.body || [];
+    // Listen for new devices via ObjectManager signal using dbus-next interface events
+    objManager.on('InterfacesAdded', (path, ifaces) => {
       if (!ifaces || !ifaces['org.bluez.Device1']) return;
       const dev = ifaces['org.bluez.Device1'];
       const id = String(path.split('/').pop());
