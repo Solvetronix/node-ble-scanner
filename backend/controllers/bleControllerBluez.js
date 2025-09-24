@@ -121,7 +121,14 @@ async function connect(req, res) {
     } catch(_) {}
 
     // Derive adapter path and interface (e.g. /org/bluez/hci0)
-    const adapterPath = devPath.split('/').slice(0, 3).join('/');
+    function getAdapterPath(devPathStr) {
+      const m = String(devPathStr || '').match(/^(.*\/hci[0-9]+)/);
+      if (m && m[1]) return m[1];
+      // Fallback: find any Adapter1 from managed
+      const candidate = Object.keys(managed || {}).find(p => managed[p] && managed[p]['org.bluez.Adapter1']);
+      return candidate || '/org/bluez/hci0';
+    }
+    const adapterPath = getAdapterPath(devPath);
     const adapterObj = await bus.getProxyObject('org.bluez', adapterPath);
     const adapterIf = adapterObj.getInterface('org.bluez.Adapter1');
 
