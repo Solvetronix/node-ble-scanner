@@ -51,8 +51,19 @@ app.get('/events', (req, res) => {
 
 // WebSocket: stream advertisements and allow snapshot on connect
 wss.on('connection', (ws) => {
-  const list = getDevicesList();
-  try { ws.send(JSON.stringify({ type: 'snapshot', data: { ts: Date.now(), devices: list, scanningActive: getScanningActive() } })); } catch (_) {}
+  const raw = getDevicesList();
+  // Sort: named devices first (by name asc), then unnamed, stable
+  const devices = raw.slice().sort((a, b) => {
+    const nameA = ((a && a.localName) ? String(a.localName).trim() : '').toLowerCase();
+    const nameB = ((b && b.localName) ? String(b.localName).trim() : '').toLowerCase();
+    const hasA = nameA.length > 0;
+    const hasB = nameB.length > 0;
+    if (hasA && !hasB) return -1;
+    if (!hasA && hasB) return 1;
+    if (hasA && hasB) return nameA.localeCompare(nameB);
+    return 0;
+  });
+  try { ws.send(JSON.stringify({ type: 'snapshot', data: { ts: Date.now(), devices, scanningActive: getScanningActive() } })); } catch (_) {}
 });
 
 // scanning logic moved to service

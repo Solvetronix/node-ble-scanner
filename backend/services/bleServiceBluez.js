@@ -63,7 +63,9 @@ async function startScan() {
       const Variant = dbus.Variant;
       const filter = {
         Transport: new Variant('s', 'le'),
-        DuplicateData: new Variant('b', true),
+        DuplicateData: new Variant('b', false),
+        // Passive scan style typical for user devices
+        RSSI: new Variant('n', -100),
       };
       await adapter.SetDiscoveryFilter(filter);
     } catch (_) {}
@@ -74,6 +76,7 @@ async function startScan() {
       try {
         const devObj = await systemBus.getProxyObject('org.bluez', path);
         const propsIf = devObj.getInterface('org.freedesktop.DBus.Properties');
+        let lastEmitTs = 0;
         propsIf.on('PropertiesChanged', (iface, changed) => {
           if (iface !== 'org.bluez.Device1') return;
           try {
@@ -98,17 +101,21 @@ async function startScan() {
             }
             setDevice(id, update);
 
-            // Emit advertisement-like event for UI updates when meaningful fields change
-            pushEvent({
-              ts: Date.now(),
-              id,
-              address: update.address,
-              rssi: update.lastRssi,
-              localName: update.localName,
-              serviceUuids: update.serviceUuids || [],
-              manufacturerData: null,
-              serviceData: [],
-            });
+            // Throttle UI events to ~1.5s per device
+            const now = Date.now();
+            if (now - lastEmitTs >= 1500) {
+              lastEmitTs = now;
+              pushEvent({
+                ts: now,
+                id,
+                address: update.address,
+                rssi: update.lastRssi,
+                localName: update.localName,
+                serviceUuids: update.serviceUuids || [],
+                manufacturerData: null,
+                serviceData: [],
+              });
+            }
           } catch (_) {}
         });
         deviceListeners.add(path);
