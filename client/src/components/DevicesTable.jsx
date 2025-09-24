@@ -4,12 +4,16 @@ import LinkOffIcon from '@mui/icons-material/LinkOff'
 import InfoIcon from '@mui/icons-material/Info'
 
 export default function DevicesTable({ devices = [], extended = false, connectingSet = new Set(), connectedSet = new Set(), onConnect, onDisconnect, onInfo }){
-  function formatName(localName, address){
-    if (!localName) return ''
-    const macColon = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i
-    const macHyphen = /^([0-9A-F]{2}-){5}[0-9A-F]{2}$/i
-    if (macColon.test(localName) || macHyphen.test(localName)) return ''
-    return localName
+  function formatName(localName, address, id){
+    if (typeof localName === 'string') {
+      const trimmed = localName.trim()
+      if (trimmed.length > 0) {
+        const macColon = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i
+        const macHyphen = /^([0-9A-F]{2}-){5}[0-9A-F]{2}$/i
+        if (!macColon.test(trimmed) && !macHyphen.test(trimmed)) return trimmed
+      }
+    }
+    return (address && String(address)) || (id && String(id)) || ''
   }
   return (
     <div className="bg-white shadow ring-1 ring-slate-200 rounded-lg overflow-hidden">
@@ -28,8 +32,8 @@ export default function DevicesTable({ devices = [], extended = false, connectin
           <tbody className="divide-y divide-slate-100">
             {devices.map((d) => (
               <tr key={d.id} className="hover:bg-slate-50">
-                <td className="px-4 py-2 text-sm">{typeof d.lastRssi === 'number' ? d.lastRssi : ''}</td>
-                <td className="px-4 py-2 text-sm">{formatName(d.localName, d.address) || ''}</td>
+                <td className="px-4 py-2 text-sm">{typeof d.lastRssi === 'number' ? d.lastRssi : '-'}</td>
+                <td className="px-4 py-2 text-sm">{formatName(d.localName, d.address, d.id)}</td>
                 {extended && <td className="px-4 py-2 text-xs text-slate-600">{d.id}</td>}
                 {extended && <td className="px-4 py-2 text-xs text-slate-600">{d.address || ''}</td>}
                 <td className="px-4 py-2 text-xs text-slate-600">{d.lastSeen ? new Date(d.lastSeen).toLocaleString() : ''}</td>
