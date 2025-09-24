@@ -208,11 +208,32 @@ async function startScan() {
   }
 }
 
+async function stopScan() {
+  try {
+    const systemBus = dbus.systemBus();
+    const root = await systemBus.getProxyObject('org.bluez', '/');
+    const objManager = root.getInterface('org.freedesktop.DBus.ObjectManager');
+    const managed = await objManager.GetManagedObjects();
+    const adapterPath = Object.keys(managed).find(p => managed[p]['org.bluez.Adapter1']);
+    if (!adapterPath) throw new Error('No Bluetooth adapter found');
+    const adapterObj = await systemBus.getProxyObject('org.bluez', adapterPath);
+    const adapter = adapterObj.getInterface('org.bluez.Adapter1');
+    try { await adapter.StopDiscovery(); } catch (_) {}
+    scanningActive = false;
+    wsBroadcast({ type: 'scan', data: { active: false, ts: Date.now(), reason: 'bluez:stop' } });
+    return true;
+  } catch (err) {
+    console.error('[bluez] stopScan failed:', err);
+    return false;
+  }
+}
+
 module.exports = {
   startScan,
   getDevicesList,
   getScanningActive,
   setDevice,
+  stopScan,
 };
 
 
