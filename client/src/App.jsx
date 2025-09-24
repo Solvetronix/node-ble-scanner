@@ -62,16 +62,18 @@ function App() {
       setDevices((prev) => {
         const map = new Map(prev.map(d => [d.id, d]))
         const d = msg.data
+        const prevD = map.get(d.id) || { id: d.id }
         const updated = {
           id: d.id,
-          address: d.address,
-          localName: d.localName || null,
+          // keep previous address/name if incoming is empty/undefined
+          address: d.address || prevD.address || null,
+          localName: (typeof d.localName === 'string' && d.localName.trim().length > 0) ? d.localName : (prevD.localName || null),
           lastRssi: d.rssi,
           lastSeen: d.ts,
-          serviceUuids: d.serviceUuids || [],
-          manufacturerDataHex: d.manufacturerData || null,
+          serviceUuids: (Array.isArray(d.serviceUuids) && d.serviceUuids.length > 0) ? d.serviceUuids : (prevD.serviceUuids || []),
+          manufacturerDataHex: (d.manufacturerData ? d.manufacturerData : (prevD.manufacturerDataHex || null)),
         }
-        map.set(d.id, map.has(d.id) ? { ...map.get(d.id), ...updated } : updated)
+        map.set(d.id, map.has(d.id) ? { ...prevD, ...updated } : updated)
         return Array.from(map.values())
       })
       return
