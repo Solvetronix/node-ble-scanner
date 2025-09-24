@@ -1,5 +1,15 @@
+const BASE_URL = 'http://192.168.88.103:3000'
+
+export const API_BASE_URL = BASE_URL
+
+function apiUrl(path) {
+  // ensure single slash join
+  return BASE_URL.replace(/\/$/, '') + path
+}
+
 export function post(path) {
-  return fetch(path, { method: 'POST' })
+  // perform POST request to remote backend
+  return fetch(apiUrl(path), { method: 'POST' })
 }
 
 export function connectDevice(id) {

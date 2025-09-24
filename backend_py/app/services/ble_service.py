@@ -1,5 +1,6 @@
 import asyncio
 from typing import Any, Dict, List, Optional
+from fastapi.responses import JSONResponse
 from bleak import BleakScanner, BleakClient
 from ..server import push_event, DEVICES, SCANNING_ACTIVE, ws_manager
 
@@ -35,52 +36,59 @@ async def _scan_loop(filter_min_rssi: int = -200, allow_duplicates: bool = True)
     global SCANNING_ACTIVE
     SCANNING_ACTIVE = True
     await ws_manager.broadcast({ 'type': 'scan', 'data': { 'active': True, 'ts': __import__('time').time_ns() // 1_000_000, 'reason': 'bleak:start' } })
-    scanner = BleakScanner()
-    def cb(device, advertisement_data):
-        try:
-            rssi = device.rssi
-            if rssi is None:
-                return
-            if rssi < filter_min_rssi:
-                return
-            local_name = (advertisement_data.local_name or device.name or None)
-            address = getattr(device, 'address', None)
-            id = getattr(device, 'details', None) or address or device.address or device.name or str(device)
-            # Normalize id to a stable string
-            id = str(id)
-            update = {
-                'id': id,
-                'address': address,
-                'localName': (local_name.strip() if isinstance(local_name, str) and local_name.strip() else None),
-                'lastRssi': rssi,
-                'lastSeen': __import__('time').time_ns() // 1_000_000,
-                'serviceUuids': list(advertisement_data.service_uuids or []),
-                'manufacturerDataHex': None,
-            }
-            _upsert_device(id, update)
-            asyncio.create_task(push_event({
-                'ts': update['lastSeen'],
-                'id': id,
-                'address': address,
-                'rssi': rssi,
-                'localName': update['localName'],
-                'serviceUuids': update['serviceUuids'],
-                'manufacturerData': None,
-                'serviceData': [],
-            }))
-        except Exception:
-            pass
-
+    # Simplified and robust: manual discovery loop every 3s (works across bleak versions)
     try:
-        scanner.register_detection_callback(cb)
-        await scanner.start()
         while SCANNING_ACTIVE:
-            await asyncio.sleep(1.0)
+            try:
+                try:
+                    results = await BleakScanner.discover(timeout=3.0, return_adv=True)  # type: ignore[call-arg]
+                    if isinstance(results, tuple) and len(results) >= 1:
+                        devices = results[0]
+                        adv_map = (results[1] if len(results) > 1 else {}) or {}
+                    else:
+                        devices = results
+                        adv_map = {}
+                except TypeError:
+                    devices = await BleakScanner.discover(timeout=3.0)
+                    adv_map = {}
+
+                now = __import__('time').time_ns() // 1_000_000
+                for d in (devices or []):
+                    try:
+                        address = getattr(d, 'address', None)
+                        dev_id = getattr(d, 'details', None) or address or getattr(d, 'name', None) or str(d)
+                        dev_id = str(dev_id)
+                        local_name = getattr(d, 'name', None)
+                        rssi = getattr(d, 'rssi', None)
+                        if isinstance(rssi, (int, float)) and rssi < filter_min_rssi:
+                            continue
+                        ad = (adv_map.get(d) if isinstance(adv_map, dict) else None) or {}
+                        service_uuids = list(getattr(ad, 'service_uuids', None) or [])
+                        update = {
+                            'id': dev_id,
+                            'address': address,
+                            'localName': (local_name.strip() if isinstance(local_name, str) and local_name.strip() else None),
+                            'lastRssi': rssi,
+                            'lastSeen': now,
+                            'serviceUuids': service_uuids,
+                            'manufacturerDataHex': None,
+                        }
+                        _upsert_device(dev_id, update)
+                        asyncio.create_task(push_event({
+                            'ts': now,
+                            'id': dev_id,
+                            'address': address,
+                            'rssi': rssi,
+                            'localName': update['localName'],
+                            'serviceUuids': service_uuids,
+                            'manufacturerData': None,
+                            'serviceData': [],
+                        }))
+                    except Exception:
+                        pass
+            except Exception:
+                await asyncio.sleep(2.0)
     finally:
-        try:
-            await scanner.stop()
-        except Exception:
-            pass
         SCANNING_ACTIVE = False
         await ws_manager.broadcast({ 'type': 'scan', 'data': { 'active': False, 'ts': __import__('time').time_ns() // 1_000_000, 'reason': 'bleak:stop' } })
 

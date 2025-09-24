@@ -6,28 +6,41 @@ import StopIcon from '@mui/icons-material/Stop'
 import BluetoothIcon from '@mui/icons-material/Bluetooth'
 import IconActionButton from './ui/IconActionButton'
 import DevicesTable from './components/DevicesTable'
-import { startScan, stopScan } from './api/http'
+import { startScan, stopScan, connectDevice as apiConnectDevice, disconnectDevice as apiDisconnectDevice } from './api/http'
 
 function useWebSocket(url, onMessage) {
   const [status, setStatus] = useState('connecting')
   const wsRef = useRef(null)
+  const retryDelayRef = useRef(1000)
+  const timerRef = useRef(null)
   useEffect(() => {
     let stopped = false
+    function scheduleReconnect() {
+      if (stopped) return
+      const delay = Math.min(retryDelayRef.current, 10000)
+      clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(connect, delay)
+      retryDelayRef.current = Math.min(delay * 2, 10000)
+    }
     function connect() {
       if (stopped) return
       try { if (wsRef.current) wsRef.current.close() } catch {}
       setStatus('connecting')
       const ws = new WebSocket(url)
       wsRef.current = ws
-      ws.onopen = () => setStatus('open')
-      ws.onclose = () => setStatus('closed')
-      ws.onerror = () => setStatus('error')
+      ws.onopen = () => { setStatus('open'); retryDelayRef.current = 1000 }
+      ws.onclose = () => { setStatus('closed'); scheduleReconnect() }
+      ws.onerror = () => { setStatus('error'); scheduleReconnect() }
       ws.onmessage = (e) => {
         try { onMessage && onMessage(JSON.parse(e.data)) } catch {}
       }
     }
     connect()
-    return () => { stopped = true; try { wsRef.current?.close() } catch {} }
+    return () => {
+      stopped = true
+      clearTimeout(timerRef.current)
+      try { wsRef.current?.close() } catch {}
+    }
   }, [url])
   return { status }
 }
@@ -42,7 +55,7 @@ function App() {
   const [infoDeviceId, setInfoDeviceId] = useState(null)
   const [notifyLogsById, setNotifyLogsById] = useState(() => new Map())
 
-  const { status: wsStatus } = useWebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws', (msg) => {
+  const { status: wsStatus } = useWebSocket('ws://192.168.88.103:3000/ws', (msg) => {
     if (msg?.type === 'snapshot') {
       const list = msg.data?.devices || []
       setDevices(list)
@@ -160,8 +173,8 @@ function App() {
   })
 
   const onToggleScan = () => {
-    const endpoint = scanActive ? '/scan/stop' : '/scan/start'
-    fetch(endpoint, { method: 'POST' }).catch(() => {})
+    // Use hardcoded backend URL via API helpers
+    ;(scanActive ? stopScan() : startScan()).catch(() => {})
   }
 
   const rows = useMemo(() => {
@@ -182,10 +195,10 @@ function App() {
   const onConnect = (id) => {
     // optimistic UI: mark as connecting until server updates
     setConnectingSet(prev => new Set([...prev, id]))
-    fetch('/connect/' + encodeURIComponent(id), { method: 'POST' }).catch(() => {})
+    apiConnectDevice(id).catch(() => {})
   }
   const onDisconnect = (id) => {
-    fetch('/disconnect/' + encodeURIComponent(id), { method: 'POST' }).catch(() => {})
+    apiDisconnectDevice(id).catch(() => {})
   }
   const onInfo = (id) => {
     setInfoDeviceId(id)
