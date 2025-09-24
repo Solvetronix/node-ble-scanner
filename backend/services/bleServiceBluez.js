@@ -38,6 +38,37 @@ async function startScan() {
     const adapterObj = await systemBus.getProxyObject('org.bluez', adapterPath);
     const adapter = adapterObj.getInterface('org.bluez.Adapter1');
 
+    // Prime state with already known devices so UI gets immediate snapshot
+    for (const [path, ifaces] of Object.entries(managed)) {
+      const dev = ifaces && ifaces['org.bluez.Device1'];
+      if (!dev) continue;
+      const id = String(path.split('/').pop());
+      const name = (dev.Name || dev.Alias || null);
+      const addr = dev.Address || null;
+      const rssi = typeof dev.RSSI === 'number' ? dev.RSSI : null;
+      setDevice(id, {
+        id,
+        address: addr,
+        localName: name,
+        lastRssi: rssi,
+        lastSeen: Date.now(),
+        serviceUuids: Array.isArray(dev.UUIDs) ? dev.UUIDs : [],
+        manufacturerDataHex: null,
+        connected: !!dev.Connected,
+        connectionStatus: dev.Connected ? 'connected' : null,
+      });
+      pushEvent({
+        ts: Date.now(),
+        id,
+        address: addr,
+        rssi,
+        localName: name,
+        serviceUuids: Array.isArray(dev.UUIDs) ? dev.UUIDs : [],
+        manufacturerData: null,
+        serviceData: [],
+      });
+    }
+
     // Listen for new devices via ObjectManager signal using dbus-next interface events
     objManager.on('InterfacesAdded', (path, ifaces) => {
       if (!ifaces || !ifaces['org.bluez.Device1']) return;
