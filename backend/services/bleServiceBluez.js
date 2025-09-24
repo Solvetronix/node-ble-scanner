@@ -6,6 +6,7 @@ const dbus = require('dbus-next');
 
 const devicesState = [];
 let scanningActive = false;
+const deviceListeners = new Set(); // track device paths with attached listeners
 
 function getDeviceIndex(id) {
   return devicesState.findIndex(d => d && d.id === id);
@@ -55,6 +56,52 @@ async function startScan() {
     const adapter = adapterObj.getInterface('org.bluez.Adapter1');
 
     // Prime state with already known devices so UI gets immediate snapshot
+    async function attachDeviceListener(path) {
+      if (deviceListeners.has(path)) return;
+      try {
+        const devObj = await systemBus.getProxyObject('org.bluez', path);
+        const propsIf = devObj.getInterface('org.freedesktop.DBus.Properties');
+        propsIf.on('PropertiesChanged', (iface, changed) => {
+          if (iface !== 'org.bluez.Device1') return;
+          try {
+            const id = String(path.split('/').pop());
+            const name = unwrap(changed.Name) || unwrap(changed.Alias) || undefined;
+            const addr = unwrap(changed.Address) || undefined;
+            const rssiRaw = unwrap(changed.RSSI);
+            const rssi = (typeof rssiRaw === 'number') ? rssiRaw : undefined;
+            const uuidsRaw = unwrap(changed.UUIDs);
+            const uuids = Array.isArray(uuidsRaw) ? uuidsRaw.map(unwrap) : undefined;
+            const connected = (typeof changed.Connected !== 'undefined') ? !!unwrap(changed.Connected) : undefined;
+
+            const update = { id };
+            if (typeof addr !== 'undefined') update.address = addr;
+            if (typeof name !== 'undefined') update.localName = name;
+            if (typeof rssi !== 'undefined') update.lastRssi = rssi;
+            update.lastSeen = Date.now();
+            if (typeof uuids !== 'undefined') update.serviceUuids = uuids;
+            if (typeof connected !== 'undefined') {
+              update.connected = connected;
+              update.connectionStatus = connected ? 'connected' : null;
+            }
+            setDevice(id, update);
+
+            // Emit advertisement-like event for UI updates when meaningful fields change
+            pushEvent({
+              ts: Date.now(),
+              id,
+              address: update.address,
+              rssi: update.lastRssi,
+              localName: update.localName,
+              serviceUuids: update.serviceUuids || [],
+              manufacturerData: null,
+              serviceData: [],
+            });
+          } catch (_) {}
+        });
+        deviceListeners.add(path);
+      } catch (_) {}
+    }
+
     for (const [path, ifaces] of Object.entries(managed)) {
       const dev = ifaces && ifaces['org.bluez.Device1'];
       if (!dev) continue;
@@ -81,10 +128,13 @@ async function startScan() {
         manufacturerData: null,
         serviceData: [],
       });
+
+      // Attach listener for runtime updates
+      await attachDeviceListener(path);
     }
 
     // Listen for new devices via ObjectManager signal using dbus-next interface events
-    objManager.on('InterfacesAdded', (path, ifaces) => {
+    objManager.on('InterfacesAdded', async (path, ifaces) => {
       if (!ifaces || !ifaces['org.bluez.Device1']) return;
       const dev = ifaces['org.bluez.Device1'];
       const id = String(path.split('/').pop());
@@ -110,6 +160,9 @@ async function startScan() {
         manufacturerData: null,
         serviceData: [],
       });
+
+      // Attach listener for subsequent updates
+      await attachDeviceListener(path);
     });
 
     await adapter.StartDiscovery();
