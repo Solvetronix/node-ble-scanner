@@ -97,7 +97,7 @@ async function connect(req, res) {
 
     // Retry strategy for transient "le-connection-abort-by-local"
     let attempt = 0;
-    const maxAttempts = 3;
+    const maxAttempts = 5;
     // Ensure we listen for later disconnects
     const propsIf = devObj.getInterface('org.freedesktop.DBus.Properties');
     try {
@@ -112,20 +112,32 @@ async function connect(req, res) {
       });
     } catch(_) {}
 
-    // Try connect
+    // Pre-flight: make sure BlueZ won't reject because of pending connect, ensure Trusted/AutoConnect
+    try { await devIf.CancelConnect(); } catch(_) {}
+    try {
+      const Variant = dbus.Variant;
+      try { await propsIf.Set('org.bluez.Device1', 'Trusted', new Variant('b', true)); } catch(_) {}
+      try { await propsIf.Set('org.bluez.Device1', 'AutoConnect', new Variant('b', true)); } catch(_) {}
+    } catch(_) {}
+
+    // Try connect with small backoff
     while (true) {
       try {
         await devIf.Connect();
         await awaitConnected(15000);
+        // Optionally ensure GATT is up by connecting generic attribute profile
+        try { await devIf.ConnectProfile('00001801-0000-1000-8000-00805f9b34fb'); } catch(_) {}
         break;
       } catch (err) {
         const msg = String(err || '');
         attempt += 1;
-        if (attempt >= maxAttempts || !/le-connection-abort-by-local/i.test(msg)) {
+        if (attempt >= maxAttempts) {
           throw err;
         }
         // small delay and retry
         await new Promise(r => setTimeout(r, 700));
+        // clear any pending connect before next try
+        try { await devIf.CancelConnect(); } catch(_) {}
       }
     }
 
